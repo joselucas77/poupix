@@ -3,9 +3,6 @@
 import type React from "react";
 
 import {
-  Settings,
-  Home,
-  List,
   Plus,
   Trash2,
   Edit3,
@@ -110,9 +107,7 @@ export default function BankingApp() {
   ]);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [filter, setFilter] = useState<
-    "Todos" | "Dívidas" | "Metas" | "Parcela Única" | "Parcela Mensal"
-  >("Todos");
+  const [filters, setFilters] = useState<Set<string>>(new Set(["Todos"]));
   const [showFilterModal, setShowFilterModal] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(0);
@@ -172,20 +167,32 @@ export default function BankingApp() {
       );
     }
 
-    if (filter !== "Todos") {
-      if (filter === "Dívidas") {
+    if (!filters.has("Todos")) {
+      // Apply category filters (Dívidas or Metas)
+      const hasDebtFilter = filters.has("Dívidas");
+      const hasGoalFilter = filters.has("Metas");
+
+      if (hasDebtFilter && !hasGoalFilter) {
         filtered = filtered.filter((t) => t.category === "Dívida");
-      } else if (filter === "Metas") {
+      } else if (hasGoalFilter && !hasDebtFilter) {
         filtered = filtered.filter((t) => t.category === "Meta");
-      } else if (filter === "Parcela Única") {
+      }
+      // If both or neither are selected, show all categories
+
+      // Apply installment filters (Parcela Única or Parcela Mensal)
+      const hasUniqueFilter = filters.has("Parcela Única");
+      const hasMonthlyFilter = filters.has("Parcela Mensal");
+
+      if (hasUniqueFilter && !hasMonthlyFilter) {
         filtered = filtered.filter((t) => t.installment === "única");
-      } else if (filter === "Parcela Mensal") {
+      } else if (hasMonthlyFilter && !hasUniqueFilter) {
         filtered = filtered.filter((t) => t.installment === "mensal");
       }
+      // If both or neither are selected, show all installments
     }
 
     return filtered;
-  }, [transactions, searchTerm, filter]);
+  }, [transactions, searchTerm, filters]);
 
   const paginatedTransactions = useMemo(() => {
     const startIndex = currentPage * itemsPerPage;
@@ -379,7 +386,7 @@ export default function BankingApp() {
           <Button
             variant="outline"
             size="icon"
-            className="h-10 w-10 rounded-full"
+            className="h-10 w-10 rounded-full bg-transparent"
             onClick={handleAddTransaction}
           >
             <Plus className="h-5 w-5" />
@@ -470,18 +477,22 @@ export default function BankingApp() {
             </Button>
           </div>
 
-          {filter !== "Todos" && (
+          {!filters.has("Todos") && filters.size > 0 && (
             <div className="flex items-center justify-between">
-              <Badge variant="secondary" className="text-xs">
-                Filtro: {filter}
-              </Badge>
+              <div className="flex flex-wrap gap-1">
+                {Array.from(filters).map((filter) => (
+                  <Badge key={filter} variant="secondary" className="text-xs">
+                    {filter}
+                  </Badge>
+                ))}
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setFilter("Todos")}
+                onClick={() => setFilters(new Set(["Todos"]))}
                 className="text-xs text-muted-foreground hover:text-foreground"
               >
-                Limpar filtro
+                Limpar filtros
               </Button>
             </div>
           )}
@@ -760,20 +771,63 @@ export default function BankingApp() {
               "Metas",
               "Parcela Única",
               "Parcela Mensal",
-            ].map((filterOption) => (
-              <Button
-                key={filterOption}
-                variant={filter === filterOption ? "default" : "outline"}
-                className="w-full justify-start"
-                onClick={() => {
-                  setFilter(filterOption as typeof filter);
-                  setShowFilterModal(false);
-                  setCurrentPage(0);
-                }}
-              >
-                {filterOption}
-              </Button>
-            ))}
+            ].map((filterOption) => {
+              const isSelected = filters.has(filterOption);
+              const isDisabled =
+                (filterOption === "Dívidas" && filters.has("Metas")) ||
+                (filterOption === "Metas" && filters.has("Dívidas")) ||
+                (filterOption === "Parcela Única" &&
+                  filters.has("Parcela Mensal")) ||
+                (filterOption === "Parcela Mensal" &&
+                  filters.has("Parcela Única"));
+
+              return (
+                <Button
+                  key={filterOption}
+                  variant={isSelected ? "default" : "outline"}
+                  className={`w-full justify-start ${
+                    isDisabled ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                  disabled={isDisabled}
+                  onClick={() => {
+                    if (isDisabled) return;
+
+                    const newFilters = new Set(filters);
+
+                    if (filterOption === "Todos") {
+                      setFilters(new Set(["Todos"]));
+                    } else {
+                      newFilters.delete("Todos");
+
+                      if (isSelected) {
+                        newFilters.delete(filterOption);
+                        if (newFilters.size === 0) {
+                          newFilters.add("Todos");
+                        }
+                      } else {
+                        newFilters.add(filterOption);
+                      }
+
+                      setFilters(newFilters);
+                    }
+
+                    setCurrentPage(0);
+                  }}
+                >
+                  {filterOption}
+                </Button>
+              );
+            })}
+          </div>
+
+          <div className="mt-4">
+            <Button
+              variant="outline"
+              className="w-full bg-transparent"
+              onClick={() => setShowFilterModal(false)}
+            >
+              Aplicar Filtros
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
